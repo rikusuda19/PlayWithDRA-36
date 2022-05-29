@@ -6,12 +6,16 @@ For playing audio and PTT control with radio adapter DRA-36 .
 
 ## Developping Environment
 
+* Windows 10
 * Microsoft Visual Studio 2019
 * .Net Core 3.1
 * C#
 
 
 ## Libraries
+
+Add these as references before build
+
 * NuGet
   * hidLibrary https://www.nuget.org/packages/hidlibrary
   * NAudio  https://www.nuget.org/packages/NAudio
