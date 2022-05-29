@@ -6,8 +6,27 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <COMReference Include="SpeechLib">
+      <WrapperTool>tlbimp</WrapperTool>
+      <VersionMinor>4</VersionMinor>
+      <VersionMajor>5</VersionMajor>
+      <Guid>c866ca3a-32f7-11d2-9602-00c04f8ee628</Guid>
+      <Lcid>0</Lcid>
+      <Isolated>false</Isolated>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="hidlibrary" Version="3.3.40" />
     <PackageReference Include="NAudio" Version="2.0.1" />
+    <PackageReference Include="System.Speech" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="spitalkDLL">
+      <HintPath>..\..\sapitalk\spitalkDLL\bin\Release\spitalkDLL.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

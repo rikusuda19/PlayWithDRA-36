@@ -5,8 +5,12 @@ using System.Collections.Generic;
 
 using HidLibrary;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Linq;
 using System.IO;
+
+using spitalkDLL;
+using SpeechLib;
 
 
 namespace CM119Controller.CM119Controller {
@@ -17,10 +21,25 @@ namespace CM119Controller.CM119Controller {
         static HidDevice CMediaDevice;
         static Guid DirectSoundOutGuid;
 
-
-
+        
         static void Main(string[] args) {
+
             Console.WriteLine("Hello World!");
+
+
+            SapiTalk SpTalker = new SapiTalk();
+
+            Dictionary<int, string> voiceList = SpTalker.Talkers();
+
+
+
+            //SpTalker.Talk("こんにちは");
+
+            //return;
+
+
+            // ----------------
+
 
             CMediaDevice = GetHIDDevice(0x0D8C, 0x013A);
 
@@ -35,6 +54,7 @@ namespace CM119Controller.CM119Controller {
             }
 
 
+
             if (int.TryParse(Console.ReadLine(), out int deviceChoice) && deviceChoice >= 0 && deviceChoice <= deviceList.Count - 1) {
 
                 DirectSoundOutGuid = deviceList[deviceChoice].Guid;
@@ -42,52 +62,92 @@ namespace CM119Controller.CM119Controller {
             }
             else {
                 Console.WriteLine("Device Select Error");
+                return;
             }
 
-            Console.WriteLine("Press Enter to Transmit, other key to quit");
+            
+            Console.WriteLine("Press Enter to Transmit Saw Wave Tone; Other key to skip");
 
             while (Console.ReadKey(false).Key == ConsoleKey.Enter) {
+                SetPTT(true);
+
                 TransmitAudioStream(new MemoryStream(SawWaveSample()));
-                Console.WriteLine("Saw Wave Transmitted: Press Enter to Repeat, other key to quit");
+                 SetPTT(false);
+
+                Console.WriteLine("Saw Wave Transmitted: Press Enter to Repeat, other key to proceed");
+            }
+            
+
+            CancellationTokenSource cts = new CancellationTokenSource();
+            Task SilentPlayer = PlaySilentSoundAsync(cts.Token);
+
+
+            Console.WriteLine("Choose Voice to Transmit, other key to quit");
+
+            foreach (int voiceIdx in voiceList.Keys) {
+                Console.WriteLine("{0:00};{1}", voiceIdx, voiceList[voiceIdx]);
+    
+            }
+            while(int.TryParse(Console.ReadLine(), out int voiceChoice) && voiceChoice >= 0 && voiceList.ContainsKey(voiceChoice)) {
+
+ 
+                    SpTalker.SetTalker(voiceChoice);
+                    SpTalker.SetVolume(50);
+
+
+
+                    SpAudioFormat audioFormat = SpTalker.SapiStream.Format;
+                    SpWaveFormatEx spWaveFormat = audioFormat.GetWaveFormatEx();
+
+                    SpMemoryStream sms = SpTalker.MakeStream("これはテストです");
+                    SetPTT(true);
+                    TransmitAudioStream(new MemoryStream(sms.GetData()), new WaveFormat(spWaveFormat.SamplesPerSec, spWaveFormat.BitsPerSample, spWaveFormat.Channels));
+                    SetPTT(false);
+                    Console.WriteLine("Synthesized Voice Transmitted; Choose Voice to Transmit, other key to quit");
+
+                    foreach (int voiceIdx in voiceList.Keys) {
+                        Console.WriteLine("{0:00};{1}", voiceIdx, voiceList[voiceIdx]);
+
+                    }
+
             }
 
         }
 
 
-        public static bool TransmitAudioStream(Stream stream) {
+        public static bool TransmitAudioStream(Stream stream, WaveFormat format = null) {
+
+            format ??= new WaveFormat(16000, 16, 1);
 
             DirectSoundOut DSOut = null, DSOutEmpty = null;
             try {
 
                 Console.WriteLine("DirectSoundOut Created");
                 DSOut = new DirectSoundOut(DirectSoundOutGuid);
-                DSOutEmpty = new DirectSoundOut(DirectSoundOutGuid);
 
-                Console.WriteLine("DirectSoundOut Initialized: Press Any Key");
+                Console.WriteLine("DirectSoundOut Initialized");
 
-                DSOutEmpty.Init(new RawSourceWaveStream(new MemoryStream(EmptyWaveSample()), new WaveFormat(16000, 16, 1)));
-                DSOut.Init(new RawSourceWaveStream(stream, new WaveFormat(16000, 16, 1)));
+                DSOut.Init(new RawSourceWaveStream(stream, format));
 
 
                 Console.WriteLine("DirectSoundOut Started playing");
 
 
                 // PTT をオンにする間の時間稼ぎ：無音のオーディオを流す
-                DSOutEmpty.Play();
-                SetPTT(true);
-                Thread.Sleep(100); // PTTオン～ビープ音の流れるまでの時間
-                DSOutEmpty.Stop();
-
+                //DSOutEmpty.Play();
+                //Thread.Sleep(20);
+                //SetPTT(true);
+                //Thread.Sleep(100);
+                //DSOutEmpty.Stop();
                 // ほんちゃん
                 DSOut.Play();
 
                 while (DSOut.PlaybackState == PlaybackState.Playing) {
-                    Thread.Sleep(100);  // ビープ音オフ～PTTオフまでの時間（の最大値）
+                    Thread.Sleep(50);  // ビープ音オフ～PTTオフまでの時間（の最大値）
                 }
 
-                SetPTT(false);
 
-                Console.WriteLine("DirectSoundOut Completed playing: Press Any Key");
+                Console.WriteLine("DirectSoundOut Completed playing");
 
                 return true;
             }
@@ -103,12 +163,23 @@ namespace CM119Controller.CM119Controller {
         }
 
 
+        static async Task PlaySilentSoundAsync(CancellationToken ct) {
+            DirectSoundOut DSOutEmpty = new DirectSoundOut(DirectSoundOutGuid);
+            while (true) {
+                if (ct.IsCancellationRequested) { return; }
+                DSOutEmpty.Init(new RawSourceWaveStream(new MemoryStream(EmptyWaveSample()), new WaveFormat(16000, 16, 1)));
+                await Task.Run(DSOutEmpty.Play);
+            }
+        }
+
+
+
         static byte[] SawWaveSample() {
             // Wave 波形の生成
             var sampleRate = 16000;
             var frequency = 500;
-            var amplitude = 0.2;
-            var seconds = 5;
+            var amplitude = 0.05;
+            var seconds = 2;
 
             var raw = new byte[sampleRate * seconds * 2];
 
@@ -125,6 +196,7 @@ namespace CM119Controller.CM119Controller {
             return raw;
         }
 
+        
         static byte[] EmptyWaveSample() {
 
             // 無音波形の生成
@@ -142,6 +214,7 @@ namespace CM119Controller.CM119Controller {
             return raw;
         }
 
+        
         static List<string> GetSoundDevices() {
             List<string> deviceList = new List<string>();
 
