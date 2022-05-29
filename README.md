@@ -14,7 +14,7 @@ For playing audio and PTT control with radio adapter DRA-36 .
 
 ## Libraries
 
-Add these as references before build
+Add the followings as references before build
 
 * NuGet
   * hidLibrary https://www.nuget.org/packages/hidlibrary
