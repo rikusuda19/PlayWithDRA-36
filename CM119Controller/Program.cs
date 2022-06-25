@@ -99,8 +99,8 @@ namespace CM119Controller.CM119Controller {
                     SpAudioFormat audioFormat = SpTalker.SapiStream.Format;
                     SpWaveFormatEx spWaveFormat = audioFormat.GetWaveFormatEx();
 
-                    SpMemoryStream sms = SpTalker.MakeStream("これはテストです");
                     SetPTT(true);
+                    SpMemoryStream sms = SpTalker.MakeStream("これはテストです");
                     TransmitAudioStream(new MemoryStream(sms.GetData()), new WaveFormat(spWaveFormat.SamplesPerSec, spWaveFormat.BitsPerSample, spWaveFormat.Channels));
                     SetPTT(false);
                     Console.WriteLine("Synthesized Voice Transmitted; Choose Voice to Transmit, other key to quit");
