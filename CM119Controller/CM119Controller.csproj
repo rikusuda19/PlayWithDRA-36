@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="spitalkDLL.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <COMReference Include="SpeechLib">
       <WrapperTool>tlbimp</WrapperTool>
       <VersionMinor>4</VersionMinor>
@@ -24,9 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="spitalkDLL">
-      <HintPath>..\..\sapitalk\spitalkDLL\bin\Release\spitalkDLL.dll</HintPath>
-    </Reference>
+    <ProjectReference Include="..\..\sapitalk\spitalkDLL\spitalkDLL.csproj" />
   </ItemGroup>
 
 </Project>

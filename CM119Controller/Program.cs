@@ -10,19 +10,45 @@ using System.Linq;
 using System.IO;
 
 using spitalkDLL;
-using SpeechLib;
+using System.Security.Cryptography;
+// using SpeechLib;
 
 
 namespace CM119Controller.CM119Controller {
 
 
-    class Program {
+    class CM119Controller {
 
-        static HidDevice CMediaDevice;
-        static Guid DirectSoundOutGuid;
+        public HidDevice CMediaDevice;
+        public Guid DirectSoundOutGuid;
+
+        const int CM119vid = 0x0D8C;
+        const int CM119pid = 0x013A;
+
+        CancellationTokenSource cts;
+
+        public CM119Controller() {
+        }
+
+        public CM119Controller(string CM119DevicePath, Guid DSODeviceGUID) {
+
+            CMediaDevice = HidDevices.GetDevice(CM119DevicePath);
+            DirectSoundOutGuid = DSODeviceGUID;
+               
+        }
+
+        public void EnableCM119() {
+            cts = new CancellationTokenSource();
+            Task _ = PlaySilentSoundAsync(cts.Token);
+        }
 
         
-        static void Main(string[] args) {
+        public void AbortCM119() {
+            cts.Cancel();
+        }
+
+
+        private void Main(string[] args) {
 
             Console.WriteLine("Hello World!");
 
@@ -41,7 +67,7 @@ namespace CM119Controller.CM119Controller {
             // ----------------
 
 
-            CMediaDevice = GetHIDDevice(0x0D8C, 0x013A);
+            CMediaDevice = GetHIDDevice(CM119vid, CM119pid);
 
 
             
@@ -79,7 +105,7 @@ namespace CM119Controller.CM119Controller {
             
 
             CancellationTokenSource cts = new CancellationTokenSource();
-            Task SilentPlayer = PlaySilentSoundAsync(cts.Token);
+            Task _ = PlaySilentSoundAsync(cts.Token);
 
 
             Console.WriteLine("Choose Voice to Transmit, other key to quit");
@@ -94,14 +120,17 @@ namespace CM119Controller.CM119Controller {
                     SpTalker.SetTalker(voiceChoice);
                     SpTalker.SetVolume(50);
 
-
-
-                    SpAudioFormat audioFormat = SpTalker.SapiStream.Format;
-                    SpWaveFormatEx spWaveFormat = audioFormat.GetWaveFormatEx();
-
+                    // PTT on
                     SetPTT(true);
-                    SpMemoryStream sms = SpTalker.MakeStream("これはテストです");
-                    TransmitAudioStream(new MemoryStream(sms.GetData()), new WaveFormat(spWaveFormat.SamplesPerSec, spWaveFormat.BitsPerSample, spWaveFormat.Channels));
+
+                    // 音声合成
+                    MemoryStream ms = SpTalker.MakeStream("これはテストです");
+
+                    // 選んだ音声デバイスで再生
+                    ms.Position = 0;
+                    TransmitAudioStream(ms, new WaveFormat(SpTalker.SpSamplesPerSecond, SpTalker.SpBitsPerSample, SpTalker.SpChannels));
+                    
+                    // PTT off
                     SetPTT(false);
                     Console.WriteLine("Synthesized Voice Transmitted; Choose Voice to Transmit, other key to quit");
 
@@ -115,7 +144,7 @@ namespace CM119Controller.CM119Controller {
         }
 
 
-        public static bool TransmitAudioStream(Stream stream, WaveFormat format = null) {
+        public bool TransmitAudioStream(Stream stream, WaveFormat format = null) {
 
             format ??= new WaveFormat(16000, 16, 1);
 
@@ -132,13 +161,14 @@ namespace CM119Controller.CM119Controller {
 
                 Console.WriteLine("DirectSoundOut Started playing");
 
-
+                
                 // PTT をオンにする間の時間稼ぎ：無音のオーディオを流す
                 //DSOutEmpty.Play();
                 //Thread.Sleep(20);
                 //SetPTT(true);
                 //Thread.Sleep(100);
                 //DSOutEmpty.Stop();
+
                 // ほんちゃん
                 DSOut.Play();
 
@@ -163,18 +193,23 @@ namespace CM119Controller.CM119Controller {
         }
 
 
-        static async Task PlaySilentSoundAsync(CancellationToken ct) {
+        private async Task PlaySilentSoundAsync(CancellationToken ct) {
             DirectSoundOut DSOutEmpty = new DirectSoundOut(DirectSoundOutGuid);
-            while (true) {
-                if (ct.IsCancellationRequested) { return; }
-                DSOutEmpty.Init(new RawSourceWaveStream(new MemoryStream(EmptyWaveSample()), new WaveFormat(16000, 16, 1)));
-                await Task.Run(DSOutEmpty.Play);
+            try {
+                while (true) {
+                    if (ct.IsCancellationRequested) { return; }
+                    DSOutEmpty.Init(new RawSourceWaveStream(new MemoryStream(EmptyWaveSample()), new WaveFormat(16000, 16, 1)));
+                    await Task.Run(DSOutEmpty.Play);
+                }
+            }
+            finally {
+                cts = null;
             }
         }
 
 
 
-        static byte[] SawWaveSample() {
+        public static byte[] SawWaveSample() {
             // Wave 波形の生成
             var sampleRate = 16000;
             var frequency = 500;
@@ -197,12 +232,12 @@ namespace CM119Controller.CM119Controller {
         }
 
         
-        static byte[] EmptyWaveSample() {
+        public static byte[] EmptyWaveSample() {
 
             // 無音波形の生成
             var sampleRate = 16000;
 
-            var seconds = 5;
+            var seconds = 2;
 
             var raw = new byte[sampleRate * seconds * 2];
 
@@ -215,7 +250,7 @@ namespace CM119Controller.CM119Controller {
         }
 
         
-        static List<string> GetSoundDevices() {
+        private static List<string> GetSoundDevices() {
             List<string> deviceList = new List<string>();
 
             for (int i = 0; i < WaveOut.DeviceCount; i++) {
@@ -226,17 +261,22 @@ namespace CM119Controller.CM119Controller {
         }
 
 
-        static List<DirectSoundDeviceInfo> GetDSODevices() {
+       public static List<DirectSoundDeviceInfo> GetDSODevices() {
             return DirectSoundOut.Devices.ToList();
         }
 
+
+        public static List<HidDevice> GetHidDevices(int vid, int pid) {
+
+            return HidDevices.Enumerate(vid, pid).ToList();
+
+        }
+
         static HidDevice GetHIDDevice(int vid, int pid) {
-            HidDevice[] HidDeviceList;
+            List<HidDevice> HidDeviceList = GetHidDevices(vid,pid);
             HidDevice HidDevice = null;
 
-            HidDeviceList = HidDevices.Enumerate(vid, pid).ToArray();
-
-            if (HidDeviceList.Length > 0) {
+            if (HidDeviceList.Count > 0) {
                 Console.WriteLine("HID Devices:");
                 Console.WriteLine(HidDeviceList.Select<HidDevice, string>(x => x.ToString()).Aggregate((x, y) => y + "\r\n" + x));
 
@@ -252,7 +292,7 @@ namespace CM119Controller.CM119Controller {
             return HidDevice;
         }
 
-        static bool SetPTT(bool state) {
+        public bool SetPTT(bool state) {
 
             byte[] OutData = new byte[CMediaDevice.Capabilities.OutputReportByteLength];
 
